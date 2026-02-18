@@ -140,11 +140,13 @@ export default function GomokuPage() {
             <input 
               className="w-full p-4 bg-[#00264d] border-2 border-blue-400 text-white rounded-xl outline-none placeholder:text-blue-300/50"
               placeholder="Player 1 Name (X)"
+              value={players.X}
               onChange={(e) => setPlayers(p => ({...p, X: e.target.value}))}
             />
             <input 
               className="w-full p-4 bg-[#00264d] border-2 border-red-400 text-white rounded-xl outline-none placeholder:text-red-300/50"
               placeholder="Player 2 Name (O)"
+              value={players.O}
               onChange={(e) => setPlayers(p => ({...p, O: e.target.value}))}
             />
 
@@ -172,7 +174,7 @@ export default function GomokuPage() {
             </div>
 
             <button 
-              disabled={!players.X || !players.O || gameDuration === 0}
+              disabled={!players.X.trim() || !players.O.trim() || gameDuration === 0}
               onClick={() => setGameState("playing")}
               className="w-full py-5 bg-yellow-400 hover:bg-yellow-300 disabled:bg-slate-500 text-[#002b5c] font-black rounded-xl shadow-lg transition-all active:scale-95 text-lg"
             >
@@ -187,7 +189,7 @@ export default function GomokuPage() {
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 
   return (
-    <main className="min-h-screen bg-[#002b5c] flex flex-col items-center justify-start py-6 md:py-12 px-2 md:px-4 select-none relative overflow-x-hidden">
+    <main className="min-h-screen bg-[#002b5c] flex flex-col items-center justify-center py-6 md:py-12 px-2 md:px-4 select-none relative overflow-x-hidden">
       
       {gameState === "ended" && (
         <div 
