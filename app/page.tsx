@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 
-// CSS to hide the up/down arrows (spinners) in number inputs
+// CSS to hide the up/down arrows AND make scrollbars invisible
 const hideSpinnersCSS = `
   input::-webkit-outer-spin-button,
   input::-webkit-inner-spin-button {
@@ -11,6 +11,14 @@ const hideSpinnersCSS = `
   }
   input[type=number] {
     -moz-appearance: textfield;
+  }
+  /* Make scrollbar invisible but still functional */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 `;
 
@@ -42,12 +50,12 @@ const checkWin = (board: (string | null)[][], row: number, col: number) => {
 export default function GomokuPage() {
   const [players, setPlayers] = useState({ X: "", O: "" });
   
-  // Changed to strings so you can delete them and type freely
   const [durationInput, setDurationInput] = useState({ min: "3", sec: "0" }); 
   const [gameDuration, setGameDuration] = useState(180);
   
   const [scores, setScores] = useState({ X: 0, O: 0 });
-  const [gameState, setGameState] = useState<"setup" | "playing" | "ended">("setup");
+  const [gameState, setGameState] = useState<"setup" | "playing" | "timesup" | "ended">("setup");
+  const [canClickEnd, setCanClickEnd] = useState(false);
   const [board, setBoard] = useState<(string | null)[][]>(Array(8).fill(null).map(() => Array(8).fill(null)));
   const [turn, setTurn] = useState<"X" | "O">("X");
   const [winningLine, setWinningLine] = useState<number[][] | null>(null);
@@ -55,7 +63,8 @@ export default function GomokuPage() {
   const [timeLeft, setTimeLeft] = useState(180);
   const [timerActive, setTimerActive] = useState(false);
 
-  // Sync the actual game time whenever the string inputs change
+  const [showRules, setShowRules] = useState(false);
+
   useEffect(() => {
     if (gameState === "setup") {
       const m = parseInt(durationInput.min) || 0;
@@ -63,6 +72,7 @@ export default function GomokuPage() {
       const totalSeconds = (m * 60) + s;
       setGameDuration(totalSeconds);
       setTimeLeft(totalSeconds);
+      setCanClickEnd(false);
     }
   }, [durationInput, gameState]);
 
@@ -71,15 +81,24 @@ export default function GomokuPage() {
     if (timerActive && timeLeft > 0) {
       interval = setInterval(() => setTimeLeft((t) => t - 1), 1000);
     } else if (timeLeft === 0 && gameState === "playing") {
-      setGameState("ended");
       setTimerActive(false);
+      setGameState("timesup"); // Instant "TIMES UP" popup - not clickable
+      
+      // After 2 seconds, show the winner results
+      setTimeout(() => {
+        setGameState("ended");
+        // After another 3 seconds, allow the screen to be clickable
+        setTimeout(() => {
+          setCanClickEnd(true);
+        }, 3000);
+      }, 3000);
     }
     return () => clearInterval(interval);
   }, [timerActive, timeLeft, gameState]);
 
   const handleMove = (r: number, c: number) => {
-    if (board[r][c] || winningLine || gameState === "ended") return;
-    if (!timerActive) setTimerActive(true);
+    if (board[r][c] || winningLine || gameState !== "playing") return;
+    if (!timerActive && timeLeft > 0) setTimerActive(true);
 
     const newBoard = board.map(row => [...row]);
     newBoard[r][c] = turn;
@@ -108,6 +127,7 @@ export default function GomokuPage() {
   };
 
   const restartFullGame = () => {
+    if (gameState === "ended" && !canClickEnd) return; // Prevent early clicking
     setGameState("setup");
     setScores({ X: 0, O: 0 });
     setTimeLeft(gameDuration);
@@ -115,6 +135,7 @@ export default function GomokuPage() {
     setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
     setWinningLine(null);
     setTurn("X");
+    setShowRules(false);
   };
 
   const getOverallWinner = () => {
@@ -129,6 +150,36 @@ export default function GomokuPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#002b5c] px-4 py-8">
         <style>{hideSpinnersCSS}</style>
+
+        {showRules && (
+          <div 
+            className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity"
+            onClick={() => { setGameState("playing"); setShowRules(false); }}
+          >
+            <div 
+              className="bg-[#004080] border-4 border-yellow-400 p-6 md:p-8 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl relative no-scrollbar"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-2xl md:text-3xl font-black text-yellow-400 mb-6 text-center">📜 GAME RULES</h2>
+              <div className="space-y-4 text-blue-50 text-sm md:text-base text-left">
+                <p><strong>2. Objective</strong><br/>Be the player with the highest score when the match timer ends. You earn points by connecting: 5 of your symbols in a row.</p>
+                <p><strong> 3. Board Layout</strong><br/>The board is an 8×8 grid. Players take turns placing one symbol per move. A symbol cannot be placed on an occupied cell.</p>
+                <p><strong> 4. Turn System</strong><br/>Player ✕ starts first. Players alternate turns automatically. After each round (win or draw), the starting player switches for fairness.</p>
+                <p><strong> 5. How to Win a Round</strong><br/>A round is won when a player connects 5 consecutive symbols in any of the following directions: Horizontally ➡, Vertically ⬇, and Diagonally ↘. The winning line is highlighted, the player earns +1 point, and the board resets automatically.</p>
+                <p><strong> 6. Draw Round</strong><br/>If the board fills completely and no player connects 5 symbols: The round ends in a draw, no points awarded, and the board resets.</p>
+                <p><strong> 7. Match Timer</strong><br/>The match lasts the time you set. The timer starts on the first move. Multiple rounds can occur within the time limit.</p>
+                <p><strong> 8. Final Victory</strong><br/>When the timer reaches 0: The player with the higher score wins the match. If equal, it is a DRAW. Final results are displayed on screen.</p>
+              </div>
+              <button 
+                onClick={() => { setGameState("playing"); setShowRules(false); }}
+                className="mt-8 w-full py-4 bg-yellow-400 text-[#002b5c] font-black rounded-xl hover:bg-yellow-300 transition-all shadow-lg"
+              >
+                GOT IT!
+              </button>
+            </div>
+          </div>
+        )}
+
         <h1 className="text-4xl md:text-5xl font-black text-center mb-10 text-white tracking-tighter italic leading-none drop-shadow-lg">
           CROSSWAY <br /> 
           <span className="text-yellow-400 text-2xl md:text-3xl not-italic tracking-normal">TIC-TAC-TOE</span>
@@ -175,7 +226,7 @@ export default function GomokuPage() {
 
             <button 
               disabled={!players.X.trim() || !players.O.trim() || gameDuration === 0}
-              onClick={() => setGameState("playing")}
+              onClick={() => setShowRules(true)}
               className="w-full py-5 bg-yellow-400 hover:bg-yellow-300 disabled:bg-slate-500 text-[#002b5c] font-black rounded-xl shadow-lg transition-all active:scale-95 text-lg"
             >
               START BATTLE
@@ -191,18 +242,32 @@ export default function GomokuPage() {
   return (
     <main className="min-h-screen bg-[#002b5c] flex flex-col items-center justify-center py-6 md:py-12 px-2 md:px-4 select-none relative overflow-x-hidden">
       
+      {/* 1. TIMES UP POPUP - Added pointer-events-none to prevent any interaction during the 2s wait */}
+      {gameState === "timesup" && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+           <h2 className="text-6xl md:text-9xl font-black text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)] italic animate-bounce">
+             TIMES UP!
+           </h2>
+        </div>
+      )}
+
+      {/* 2. OVERALL WINNER POPUP */}
       {gameState === "ended" && (
         <div 
           onClick={restartFullGame} 
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md cursor-pointer animate-in fade-in duration-500 px-4"
+          className={`fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md px-4 transition-all duration-500 ${canClickEnd ? "cursor-pointer" : "cursor-default pointer-events-none"}`}
         >
           <div className="bg-[#004080] border-4 md:border-8 border-yellow-400 p-8 md:p-12 rounded-[2rem] md:rounded-[3rem] text-center shadow-[0_0_100px_rgba(250,204,21,0.3)] w-full max-w-sm md:max-w-md">
             <h2 className="text-blue-200 text-xl md:text-2xl font-black uppercase tracking-[0.3em] mb-4">Final Results</h2>
             <div className="flex items-center justify-center gap-8 mb-8">
-               <div className="text-center">
-                  <p className="text-white text-3xl md:text-4xl font-black break-words">{overallWinner.name === "DRAW" ? "NO CHAMPION" : overallWinner.name}</p>
-                  <p className="text-yellow-400 text-lg md:text-xl font-bold uppercase"> Winner</p>
-               </div>
+                <div className="text-center">
+                    <p className="text-white text-3xl md:text-4xl font-black break-words">
+                        {overallWinner.name === "DRAW" ? "DRAW" : overallWinner.name}
+                    </p>
+                    <p className="text-yellow-400 text-lg md:text-xl font-bold uppercase">
+                        {overallWinner.name === "DRAW" ? " " : "Winner"}
+                    </p>
+                </div>
             </div>
             <div className="grid grid-cols-2 gap-4 bg-[#00264d] p-4 md:p-6 rounded-2xl mb-10">
                <div>
@@ -214,7 +279,9 @@ export default function GomokuPage() {
                   <p className="text-white text-2xl md:text-3xl font-black">{scores.O}</p>
                </div>
             </div>
-            <p className="text-yellow-400 font-bold animate-pulse text-base md:text-lg">Click anywhere to restart battle</p>
+            <p className={`text-yellow-400 font-bold text-base md:text-lg transition-opacity duration-300 ${canClickEnd ? "animate-pulse opacity-100" : "opacity-0"}`}>
+              Click anywhere to restart battle
+            </p>
           </div>
         </div>
       )}
@@ -251,7 +318,7 @@ export default function GomokuPage() {
                 onClick={() => handleMove(rIdx, cIdx)}
                 className={`
                   w-[min(10.5vw,3.5rem)] h-[min(10.5vw,3.5rem)] flex items-center justify-center rounded-md md:rounded-xl transition-all duration-150
-                  ${!cell && gameState !== "ended" ? "bg-[#0059b3] hover:bg-[#006bd6]" : "bg-[#0059b3]"}
+                  ${!cell && gameState === "playing" ? "bg-[#0059b3] hover:bg-[#006bd6]" : "bg-[#0059b3]"}
                   ${isWinning ? "bg-yellow-400 scale-110 z-10 shadow-[0_0_20px_#facc15]" : ""}
                 `}
               >
