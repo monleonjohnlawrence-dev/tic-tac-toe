@@ -63,6 +63,9 @@ export default function GomokuPage() {
   const [timeLeft, setTimeLeft] = useState(180);
   const [timerActive, setTimerActive] = useState(false);
 
+  // FEATURE: Turn Timer State
+  const [turnTimeLeft, setTurnTimeLeft] = useState(3);
+
   const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
@@ -82,12 +85,10 @@ export default function GomokuPage() {
       interval = setInterval(() => setTimeLeft((t) => t - 1), 1000);
     } else if (timeLeft === 0 && gameState === "playing") {
       setTimerActive(false);
-      setGameState("timesup"); // Instant "TIMES UP" popup - not clickable
+      setGameState("timesup"); 
       
-      // After 2 seconds, show the winner results
       setTimeout(() => {
         setGameState("ended");
-        // After another 3 seconds, allow the screen to be clickable
         setTimeout(() => {
           setCanClickEnd(true);
         }, 3000);
@@ -96,9 +97,33 @@ export default function GomokuPage() {
     return () => clearInterval(interval);
   }, [timerActive, timeLeft, gameState]);
 
+  // FEATURE: Turn Timer Logic (3 seconds)
+  useEffect(() => {
+    let turnInterval: any;
+    if (gameState === "playing" && timerActive) {
+      turnInterval = setInterval(() => {
+        setTurnTimeLeft((prev) => {
+          if (prev <= 1) {
+            // Time is up! Add point to opponent
+            const opponent = turn === "X" ? "O" : "X";
+            setScores(s => ({ ...s, [opponent]: s[opponent] + 1 }));
+            
+            // Logic: Do NOT switch turn, just reset the 3s clock for the same player
+            return 3; 
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(turnInterval);
+  }, [gameState, timerActive, turn]);
+
   const handleMove = (r: number, c: number) => {
     if (board[r][c] || winningLine || gameState !== "playing") return;
     if (!timerActive && timeLeft > 0) setTimerActive(true);
+
+    // Reset turn timer on successful move
+    setTurnTimeLeft(3);
 
     const newBoard = board.map(row => [...row]);
     newBoard[r][c] = turn;
@@ -113,12 +138,14 @@ export default function GomokuPage() {
         setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
         setWinningLine(null);
         setTurn(starter);
+        setTurnTimeLeft(3); // Reset timer for new round
       }, 2000);
     } else {
       if (newBoard.flat().every(cell => cell !== null)) {
         setTimeout(() => {
           setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
           setTurn(turn === "X" ? "O" : "X");
+          setTurnTimeLeft(3);
         }, 1000);
       } else {
         setTurn(turn === "X" ? "O" : "X");
@@ -127,10 +154,11 @@ export default function GomokuPage() {
   };
 
   const restartFullGame = () => {
-    if (gameState === "ended" && !canClickEnd) return; // Prevent early clicking
+    if (gameState === "ended" && !canClickEnd) return; 
     setGameState("setup");
     setScores({ X: 0, O: 0 });
     setTimeLeft(gameDuration);
+    setTurnTimeLeft(3);
     setTimerActive(false);
     setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
     setWinningLine(null);
@@ -162,6 +190,7 @@ export default function GomokuPage() {
             >
               <h2 className="text-2xl md:text-3xl font-black text-yellow-400 mb-6 text-center">📜 GAME RULES</h2>
               <div className="space-y-4 text-blue-50 text-sm md:text-base text-left">
+                <p className="bg-red-500/20 p-2 rounded border border-red-500/50 text-red-200"><strong>🔥 SPEED FEATURE:</strong> You have only 3 seconds to move! If you fail, the opponent gets +1 point automatically, but it remains your turn.</p>
                 <p><strong>2. Objective</strong><br/>Be the player with the highest score when the match timer ends. You earn points by connecting: 5 of your symbols in a row.</p>
                 <p><strong> 3. Board Layout</strong><br/>The board is an 8×8 grid. Players take turns placing one symbol per move. A symbol cannot be placed on an occupied cell.</p>
                 <p><strong> 4. Turn System</strong><br/>Player ✕ starts first. Players alternate turns automatically. After each round (win or draw), the starting player switches for fairness.</p>
@@ -242,7 +271,6 @@ export default function GomokuPage() {
   return (
     <main className="min-h-screen bg-[#002b5c] flex flex-col items-center justify-center py-6 md:py-12 px-2 md:px-4 select-none relative overflow-x-hidden">
       
-      {/* 1. TIMES UP POPUP - Added pointer-events-none to prevent any interaction during the 2s wait */}
       {gameState === "timesup" && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
            <h2 className="text-6xl md:text-9xl font-black text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)] italic animate-bounce">
@@ -251,7 +279,6 @@ export default function GomokuPage() {
         </div>
       )}
 
-      {/* 2. OVERALL WINNER POPUP */}
       {gameState === "ended" && (
         <div 
           onClick={restartFullGame} 
@@ -292,7 +319,9 @@ export default function GomokuPage() {
         </h1>
       </header>
 
-      <div className="relative md:absolute md:top-8 md:left-8 mb-6 md:mb-0 bg-[#d9e6f2] text-[#002b5c] px-6 py-2 rounded-full font-black text-xl md:text-2xl shadow-lg border-2 border-white">
+      {/* Main Game Timer */}
+      <div className="relative md:absolute md:top-8 md:left-8 mb-6 md:mb-0 bg-[#d9e6f2] text-[#002b5c] px-6 py-2 rounded-full font-black text-xl md:text-2xl shadow-lg border-2 border-white flex flex-col items-center">
+        <span className="text-xs uppercase opacity-50 leading-none mb-1">Match Time</span>
         {formatTime(timeLeft)}
       </div>
 
@@ -306,7 +335,12 @@ export default function GomokuPage() {
             <p className="text-white font-black text-base md:text-xl mb-1 truncate max-w-[100px] md:max-w-[140px]">{players.O}</p>
             <p className="text-blue-200 font-bold text-sm md:text-base">{scores.O} win</p>
           </div>
-          {turn === 'O' && <p className="hidden lg:block mt-4 text-white font-black text-xl tracking-wide animate-pulse">Your turn</p>}
+          {turn === 'O' && (
+            <div className="mt-4 text-center">
+              <p className="text-white font-black text-xl tracking-wide animate-pulse">Your turn</p>
+              <p className="text-red-400 font-black text-3xl">{turnTimeLeft}</p>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-8 gap-1 md:gap-2 p-1.5 md:p-3 bg-[#004080] rounded-xl md:rounded-2xl border-4 border-[#0059b3] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
@@ -338,8 +372,13 @@ export default function GomokuPage() {
             <span className="text-4xl md:text-7xl font-black text-yellow-400 mb-2 md:mb-4 drop-shadow-lg leading-none">✕</span>
             <p className="text-white font-black text-base md:text-xl mb-1 truncate max-w-[100px] md:max-w-[140px]">{players.X}</p>
             <p className="text-blue-200 font-bold text-sm md:text-base">{scores.X} win</p>
-          </div>
-          {turn === 'X' && <p className="hidden lg:block mt-4 text-white font-black text-xl tracking-wide animate-pulse">Your turn</p>}
+          </div>  
+          {turn === 'X' && (
+            <div className="mt-4 text-center">
+              <p className="text-white font-black text-xl tracking-wide animate-pulse">Your turn</p>
+              <p className="text-yellow-400 font-black text-3xl">{turnTimeLeft}</p>
+            </div>
+          )}
         </div>
 
       </div>
